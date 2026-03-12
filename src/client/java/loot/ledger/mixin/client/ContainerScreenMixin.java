@@ -1,10 +1,12 @@
 package loot.ledger.mixin.client;
 
+import loot.ledger.LootLedgerClient;
 import loot.ledger.LootLedgerScreen;
 import loot.ledger.network.LootLedgerPackets;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.ingame.CraftingScreen;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.gui.tooltip.Tooltip;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -36,33 +38,44 @@ public abstract class ContainerScreenMixin<T extends ScreenHandler> extends Scre
 
     @Inject(method = "init", at = @At("TAIL"))
     private void onInit(CallbackInfo ci) {
-        int btnX = this.x + this.backgroundWidth + 4;
-        int btnY = this.y + (this.backgroundHeight / 2) - 10;
+        if ((Object) this instanceof CraftingScreen) return;
+
+        lootLedgerPos = null;
+
+        if (LootLedgerClient.pendingPos != null) {
+            lootLedgerPos = LootLedgerClient.pendingPos;
+            LootLedgerClient.pendingPos = null;
+        }
 
         lootLedgerButton = ButtonWidget.builder(Text.empty(), btn -> {
                     if (lootLedgerPos != null) {
                         ClientPlayNetworking.send(new LootLedgerPackets.RequestLogPayload(lootLedgerPos));
                     }
                 })
-                .dimensions(btnX, btnY, 20, 20)
+                .dimensions(0, 0, 20, 20)
                 .tooltip(Tooltip.of(Text.literal("Show Container History")))
                 .build();
 
-        lootLedgerButton.visible = false;
+        lootLedgerButton.visible = lootLedgerPos != null;
         this.addDrawableChild(lootLedgerButton);
     }
 
     @Inject(method = "render", at = @At("TAIL"))
     private void onRender(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
-        if (lootLedgerButton != null && lootLedgerPos != null) {
+        if ((Object) this instanceof CraftingScreen) return;
+        if (lootLedgerButton == null) return;
+
+        lootLedgerButton.setX(this.x + this.backgroundWidth + 4);
+        lootLedgerButton.setY(this.y + this.backgroundHeight - 76);
+
+        if (lootLedgerPos != null) {
             lootLedgerButton.visible = true;
-            // Buch als Icon auf dem Button zeichnen
             context.drawItem(
                     new ItemStack(Items.WRITABLE_BOOK),
                     lootLedgerButton.getX() + 2,
                     lootLedgerButton.getY() + 2
             );
-        } else if (lootLedgerButton != null) {
+        } else {
             lootLedgerButton.visible = false;
         }
     }

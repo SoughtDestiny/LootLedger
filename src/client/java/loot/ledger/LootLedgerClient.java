@@ -20,6 +20,7 @@ public class LootLedgerClient implements ClientModInitializer {
 				LootLedgerPackets.ContainerOpenedPayload.ID,
 				(payload, context) -> {
 					context.client().execute(() -> {
+						pendingPos = null;
 						if (context.client().currentScreen instanceof net.minecraft.client.gui.screen.ingame.HandledScreen<?> screen) {
 							if (screen instanceof LootLedgerScreen lootScreen) {
 								lootScreen.setLootLedgerPos(payload.pos());

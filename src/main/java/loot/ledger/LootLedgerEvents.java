@@ -160,6 +160,7 @@ public class LootLedgerEvents {
     }
 
     private static boolean isTrackedContainer(BlockEntity be) {
+        if (be instanceof net.minecraft.block.entity.EnderChestBlockEntity) return false;
         return be instanceof Inventory;
     }
 
