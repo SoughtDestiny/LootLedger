@@ -1,6 +1,6 @@
 package loot.ledger;
 
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
 
 public interface ScreenHandlerPos {
     void lootledger_setPos(BlockPos pos);

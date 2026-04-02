@@ -1,30 +1,29 @@
 package loot.ledger;
 
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.BlockPos;
 
 import java.util.*;
 
 public class ContainerAccessLog {
-
-    public static final int MAX_ENTRIES = 50;
 
     private static final Map<BlockPos, List<LogEntry>> log = new HashMap<>();
 
     public static void addEntry(BlockPos pos, String playerName, ItemStack stack, boolean removed) {
         List<LogEntry> entries = log.computeIfAbsent(pos, k -> new ArrayList<>());
 
-        String itemId   = Registries.ITEM.getId(stack.getItem()).toString();
-        String itemName = stack.getName().getString();
+        String itemId   = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        String itemName = stack.getHoverName().getString();
         int count       = stack.getCount();
 
         entries.add(0, new LogEntry(playerName, itemId, itemName, count, removed, System.currentTimeMillis()));
 
-        if (entries.size() > MAX_ENTRIES) {
-            entries.subList(MAX_ENTRIES, entries.size()).clear();
+        int maxEntries = LootLedgerConfig.getMaxEntries();
+        if (maxEntries != -1 && entries.size() > maxEntries) {
+            entries.subList(maxEntries, entries.size()).clear();
         }
     }
 
@@ -40,9 +39,9 @@ public class ContainerAccessLog {
         log.clear();
     }
 
-    public static NbtCompound toNbt(BlockPos pos) {
-        NbtCompound compound = new NbtCompound();
-        NbtList list = new NbtList();
+    public static CompoundTag toNbt(BlockPos pos) {
+        CompoundTag compound = new CompoundTag();
+        ListTag list = new ListTag();
         for (LogEntry entry : log.getOrDefault(pos, Collections.emptyList())) {
             list.add(entry.toNbt());
         }
@@ -50,17 +49,15 @@ public class ContainerAccessLog {
         return compound;
     }
 
-    public static void fromNbt(BlockPos pos, NbtCompound compound) {
-        NbtList list = compound.getListOrEmpty("entries");
+    public static void fromNbt(BlockPos pos, CompoundTag compound) {
+        ListTag list = compound.getListOrEmpty("entries");
         List<LogEntry> entries = new ArrayList<>();
         for (int i = 0; i < list.size(); i++) {
-            NbtCompound entry = list.getCompound(i).orElseGet(NbtCompound::new);
+            CompoundTag entry = list.getCompound(i).orElseGet(CompoundTag::new);
             entries.add(LogEntry.fromNbt(entry));
         }
         log.put(pos, entries);
     }
-
-    // ---- Inner Class ----
 
     public static class LogEntry {
         public final String playerName;
@@ -79,8 +76,8 @@ public class ContainerAccessLog {
             this.timestamp  = timestamp;
         }
 
-        public NbtCompound toNbt() {
-            NbtCompound compound = new NbtCompound();
+        public CompoundTag toNbt() {
+            CompoundTag compound = new CompoundTag();
             compound.putString("player",   playerName);
             compound.putString("itemId",   itemId);
             compound.putString("itemName", itemName);
@@ -90,7 +87,7 @@ public class ContainerAccessLog {
             return compound;
         }
 
-        public static LogEntry fromNbt(NbtCompound compound) {
+        public static LogEntry fromNbt(CompoundTag compound) {
             String player   = compound.getString("player").orElse("Unknown");
             String itemId   = compound.getString("itemId").orElse("minecraft:air");
             String itemName = compound.getString("itemName").orElse("Unknown Item");

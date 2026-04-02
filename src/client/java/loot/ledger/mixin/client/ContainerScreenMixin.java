@@ -4,35 +4,35 @@ import loot.ledger.LootLedgerClient;
 import loot.ledger.LootLedgerScreen;
 import loot.ledger.network.LootLedgerPackets;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.ingame.CraftingScreen;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.gui.tooltip.Tooltip;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.CraftingScreen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.network.chat.Component;
+import net.minecraft.core.BlockPos;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(HandledScreen.class)
-public abstract class ContainerScreenMixin<T extends ScreenHandler> extends Screen implements LootLedgerScreen {
+@Mixin(AbstractContainerScreen.class)
+public abstract class ContainerScreenMixin<T extends AbstractContainerMenu> extends Screen implements LootLedgerScreen {
 
-    @Shadow protected int x;
-    @Shadow protected int y;
-    @Shadow protected int backgroundWidth;
-    @Shadow protected int backgroundHeight;
+    @Shadow protected int leftPos;
+    @Shadow protected int topPos;
+    @Shadow protected int imageWidth;
+    @Shadow protected int imageHeight;
 
-    private ButtonWidget lootLedgerButton;
+    private Button lootLedgerButton;
     private BlockPos lootLedgerPos;
 
-    protected ContainerScreenMixin(Text title) {
+    protected ContainerScreenMixin(Component title) {
         super(title);
     }
 
@@ -47,30 +47,30 @@ public abstract class ContainerScreenMixin<T extends ScreenHandler> extends Scre
             LootLedgerClient.pendingPos = null;
         }
 
-        lootLedgerButton = ButtonWidget.builder(Text.empty(), btn -> {
+        lootLedgerButton = Button.builder(Component.empty(), btn -> {
                     if (lootLedgerPos != null) {
                         ClientPlayNetworking.send(new LootLedgerPackets.RequestLogPayload(lootLedgerPos));
                     }
                 })
-                .dimensions(0, 0, 20, 20)
-                .tooltip(Tooltip.of(Text.literal("Show Container History")))
+                .bounds(0, 0, 20, 20)
+                .tooltip(Tooltip.create(Component.literal("Show Container History")))
                 .build();
 
         lootLedgerButton.visible = lootLedgerPos != null;
-        this.addDrawableChild(lootLedgerButton);
+        this.addRenderableWidget(lootLedgerButton);
     }
 
-    @Inject(method = "render", at = @At("TAIL"))
-    private void onRender(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+    @Inject(method = "extractRenderState", at = @At("TAIL"))
+    private void onRender(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         if ((Object) this instanceof CraftingScreen) return;
         if (lootLedgerButton == null) return;
 
-        lootLedgerButton.setX(this.x + this.backgroundWidth + 4);
-        lootLedgerButton.setY(this.y + this.backgroundHeight - 76);
+        lootLedgerButton.setX(this.leftPos + this.imageWidth + 4);
+        lootLedgerButton.setY(this.topPos + this.imageHeight - 76);
 
         if (lootLedgerPos != null) {
             lootLedgerButton.visible = true;
-            context.drawItem(
+            ctx.item(
                     new ItemStack(Items.WRITABLE_BOOK),
                     lootLedgerButton.getX() + 2,
                     lootLedgerButton.getY() + 2

@@ -3,17 +3,17 @@ package loot.ledger;
 import loot.ledger.network.LootLedgerPackets;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.block.ChestBlock;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.ChestBlockEntity;
-import net.minecraft.block.enums.ChestType;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.state.properties.ChestType;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -24,40 +24,40 @@ public class LootLedgerEvents {
 
     public static void register() {
         UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
-            if (world.isClient()) return ActionResult.PASS;
-            if (hand != Hand.MAIN_HAND) return ActionResult.PASS;
+            if (world.isClientSide()) return InteractionResult.PASS;
+            if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
 
             BlockPos pos = hitResult.getBlockPos();
             BlockEntity be = world.getBlockEntity(pos);
-            if (!isTrackedContainer(be)) return ActionResult.PASS;
+            if (!isTrackedContainer(be)) return InteractionResult.PASS;
 
             BlockPos trackPos = getCanonicalPos(world, pos, be);
-            ServerPlayerEntity serverPlayer = (ServerPlayerEntity) player;
+            ServerPlayer serverPlayer = (ServerPlayer) player;
 
-            Inventory inventory = getInventory(world, pos, be);
-            if (inventory == null) return ActionResult.PASS;
+            Container inventory = getInventory(world, pos, be);
+            if (inventory == null) return InteractionResult.PASS;
 
-            pendingPos.put(serverPlayer.getUuidAsString(), trackPos);
-            pendingInventorySize.put(serverPlayer.getUuidAsString(), inventory.size());
+            pendingPos.put(serverPlayer.getStringUUID(), trackPos);
+            pendingInventorySize.put(serverPlayer.getStringUUID(), inventory.getContainerSize());
 
             ServerPlayNetworking.send(
                     serverPlayer,
                     new LootLedgerPackets.ContainerOpenedPayload(trackPos)
             );
 
-            return ActionResult.PASS;
+            return InteractionResult.PASS;
         });
 
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(server -> {
             if (pendingPos.isEmpty()) return;
-            for (net.minecraft.server.world.ServerWorld world : server.getWorlds()) {
-                for (ServerPlayerEntity player : world.getPlayers()) {
-                    String uuid = player.getUuidAsString();
+            for (net.minecraft.server.level.ServerLevel world : server.getAllLevels()) {
+                for (ServerPlayer player : world.players()) {
+                    String uuid = player.getStringUUID();
                     BlockPos pos = pendingPos.get(uuid);
                     if (pos == null) continue;
 
-                    ScreenHandler handler = player.currentScreenHandler;
-                    if (handler == player.playerScreenHandler) continue;
+                    AbstractContainerMenu handler = player.containerMenu;
+                    if (handler == player.inventoryMenu) continue;
 
                     ((ScreenHandlerPos)(Object) handler).lootledger_setPos(pos);
 
@@ -65,7 +65,7 @@ public class LootLedgerEvents {
                     if (!snapshots.containsKey(key)) {
                         BlockEntity be = world.getBlockEntity(pos);
                         if (be != null) {
-                            Inventory inventory = getInventory(world, pos, be);
+                            Container inventory = getInventory(world, pos, be);
                             if (inventory != null) {
                                 takeSnapshot(player, pos, inventory);
                             }
@@ -82,10 +82,10 @@ public class LootLedgerEvents {
     private static final Map<String, BlockPos> pendingPos = new HashMap<>();
     private static final Map<String, Integer> pendingInventorySize = new HashMap<>();
 
-    public static void afterSlotClick(ServerPlayerEntity player, ScreenHandler handler,
+    public static void afterSlotClick(ServerPlayer player, AbstractContainerMenu handler,
                                       int slotIndex, ItemStack oldStack, ItemStack newStack) {
-        if (handler == player.playerScreenHandler) return;
-        if (ItemStack.areEqual(oldStack, newStack)) return;
+        if (handler == player.inventoryMenu) return;
+        if (ItemStack.matches(oldStack, newStack)) return;
 
         BlockPos pos = ((ScreenHandlerPos)(Object) handler).lootledger_getPos();
         if (pos == null) return;
@@ -113,10 +113,10 @@ public class LootLedgerEvents {
         updateSnapshotSlotForAll(pos, slotIndex, newStack);
     }
 
-    public static void onContainerClosed(ServerPlayerEntity player) {
-        pendingPos.remove(player.getUuidAsString());
-        pendingInventorySize.remove(player.getUuidAsString());
-        snapshots.keySet().removeIf(key -> key.startsWith(player.getUuidAsString()));
+    public static void onContainerClosed(ServerPlayer player) {
+        pendingPos.remove(player.getStringUUID());
+        pendingInventorySize.remove(player.getStringUUID());
+        snapshots.keySet().removeIf(key -> key.startsWith(player.getStringUUID()));
     }
 
     private static void updateSnapshotSlotForAll(BlockPos pos, int slotIndex, ItemStack newStack) {
@@ -128,30 +128,30 @@ public class LootLedgerEvents {
         }
     }
 
-    private static Inventory getInventory(net.minecraft.world.World world, BlockPos pos, BlockEntity be) {
+    private static Container getInventory(net.minecraft.world.level.Level world, BlockPos pos, BlockEntity be) {
         if (be instanceof ChestBlockEntity) {
-            net.minecraft.block.BlockState state = world.getBlockState(pos);
+            net.minecraft.world.level.block.state.BlockState state = world.getBlockState(pos);
             if (state.getBlock() instanceof ChestBlock chestBlock) {
-                Inventory combined = ChestBlock.getInventory(chestBlock, state, world, pos, true);
+                Container combined = ChestBlock.getContainer(chestBlock, state, world, pos, true);
                 if (combined != null) return combined;
             }
         }
-        if (be instanceof Inventory inv) return inv;
+        if (be instanceof Container inv) return inv;
         return null;
     }
 
-    private static BlockPos getCanonicalPos(net.minecraft.world.World world, BlockPos pos, BlockEntity be) {
+    private static BlockPos getCanonicalPos(net.minecraft.world.level.Level world, BlockPos pos, BlockEntity be) {
         if (be instanceof ChestBlockEntity) {
-            net.minecraft.block.BlockState state = world.getBlockState(pos);
+            net.minecraft.world.level.block.state.BlockState state = world.getBlockState(pos);
             if (state.getBlock() instanceof ChestBlock) {
-                ChestType chestType = state.get(ChestBlock.CHEST_TYPE);
+                ChestType chestType = state.getValue(ChestBlock.TYPE);
                 if (chestType != ChestType.SINGLE) {
-                    net.minecraft.util.math.Direction facing = state.get(ChestBlock.FACING);
-                    net.minecraft.util.math.Direction otherDir =
+                    net.minecraft.core.Direction facing = state.getValue(ChestBlock.FACING);
+                    net.minecraft.core.Direction otherDir =
                             chestType == ChestType.LEFT
-                                    ? facing.rotateYClockwise()
-                                    : facing.rotateYCounterclockwise();
-                    BlockPos otherPos = pos.offset(otherDir);
+                                    ? facing.getClockWise()
+                                    : facing.getCounterClockWise();
+                    BlockPos otherPos = pos.relative(otherDir);
                     if (otherPos.compareTo(pos) < 0) return otherPos;
                 }
             }
@@ -160,20 +160,20 @@ public class LootLedgerEvents {
     }
 
     private static boolean isTrackedContainer(BlockEntity be) {
-        if (be instanceof net.minecraft.block.entity.EnderChestBlockEntity) return false;
-        return be instanceof Inventory;
+        if (be instanceof net.minecraft.world.level.block.entity.EnderChestBlockEntity) return false;
+        return be instanceof Container;
     }
 
-    private static void takeSnapshot(ServerPlayerEntity player, BlockPos pos, Inventory inventory) {
+    private static void takeSnapshot(ServerPlayer player, BlockPos pos, Container inventory) {
         String key = snapshotKey(player, pos);
         Map<Integer, ItemStack> snapshot = new HashMap<>();
-        for (int i = 0; i < inventory.size(); i++) {
-            snapshot.put(i, inventory.getStack(i).copy());
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            snapshot.put(i, inventory.getItem(i).copy());
         }
         snapshots.put(key, snapshot);
     }
 
-    public static String snapshotKey(ServerPlayerEntity player, BlockPos pos) {
-        return player.getUuidAsString() + "@" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
+    public static String snapshotKey(ServerPlayer player, BlockPos pos) {
+        return player.getStringUUID() + "@" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
     }
 }

@@ -4,7 +4,7 @@ import loot.ledger.gui.HistoryOverlayScreen;
 import loot.ledger.network.LootLedgerPackets;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,15 +13,17 @@ public class LootLedgerClient implements ClientModInitializer {
 
 	public static List<HistoryOverlayScreen.ClientLogEntry> pendingEntries = new ArrayList<>();
 	public static BlockPos pendingPos = null;
+	public static int currentMaxEntries = 128;
+	public static boolean canEditConfig = true;
 
 	@Override
 	public void onInitializeClient() {
 		ClientPlayNetworking.registerGlobalReceiver(
-				LootLedgerPackets.ContainerOpenedPayload.ID,
+				LootLedgerPackets.ContainerOpenedPayload.TYPE,
 				(payload, context) -> {
 					context.client().execute(() -> {
 						pendingPos = null;
-						if (context.client().currentScreen instanceof net.minecraft.client.gui.screen.ingame.HandledScreen<?> screen) {
+						if (context.client().screen instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?> screen) {
 							if (screen instanceof LootLedgerScreen lootScreen) {
 								lootScreen.setLootLedgerPos(payload.pos());
 							}
@@ -32,7 +34,17 @@ public class LootLedgerClient implements ClientModInitializer {
 		);
 
 		ClientPlayNetworking.registerGlobalReceiver(
-				LootLedgerPackets.LogResponsePayload.ID,
+				LootLedgerPackets.ConfigSyncPayload.TYPE,
+				(payload, context) -> {
+					context.client().execute(() -> {
+						currentMaxEntries = payload.maxEntries();
+						canEditConfig = payload.canEdit();
+					});
+				}
+		);
+
+		ClientPlayNetworking.registerGlobalReceiver(
+				LootLedgerPackets.LogResponsePayload.TYPE,
 				(payload, context) -> {
 					List<HistoryOverlayScreen.ClientLogEntry> entries = new ArrayList<>();
 

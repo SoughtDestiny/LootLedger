@@ -1,11 +1,11 @@
 package loot.ledger.mixin;
 
 import loot.ledger.ScreenHandlerPos;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.core.BlockPos;
 import org.spongepowered.asm.mixin.Mixin;
 
-@Mixin(ScreenHandler.class)
+@Mixin(AbstractContainerMenu.class)
 public class ScreenHandlerOpenMixin implements ScreenHandlerPos {
 
     private BlockPos lootledger_pos = null;

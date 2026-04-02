@@ -11,7 +11,7 @@ public class LootLedger implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
-		LOGGER.info("LootLedger gestartet!");
+		LOGGER.info("[LootLedger] Initialized.");
 		LootLedgerEvents.register();
 		LootLedgerPackets.registerServer();
 		LootLedgerSaveData.register();

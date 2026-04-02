@@ -1,13 +1,18 @@
 package loot.ledger.gui;
 
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.core.BlockPos;
+import org.lwjgl.glfw.GLFW;
+
+import loot.ledger.LootLedgerClient;
+import loot.ledger.LootLedgerConfig;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -27,7 +32,7 @@ public class HistoryOverlayScreen extends Screen {
     private int hoveredEntry = -1;
 
     public HistoryOverlayScreen(List<ClientLogEntry> entries, BlockPos pos) {
-        super(Text.literal("LootLedger"));
+        super(Component.literal("LootLedger"));
         this.entries = entries;
         this.pos     = pos;
     }
@@ -37,53 +42,57 @@ public class HistoryOverlayScreen extends Screen {
         int panelX = (this.width  - PANEL_WIDTH)  / 2;
         int panelY = (this.height - PANEL_HEIGHT) / 2;
 
-        this.addDrawableChild(ButtonWidget.builder(Text.literal("X"), btn -> this.close())
-                .dimensions(panelX + PANEL_WIDTH - 20, panelY + 4, 16, 16)
+        this.addRenderableWidget(Button.builder(Component.literal("X"), btn -> this.onClose())
+                .bounds(panelX + PANEL_WIDTH - 20, panelY + 4, 16, 16)
                 .build());
 
-        this.addDrawableChild(ButtonWidget.builder(Text.literal("A"), btn -> {
+        this.addRenderableWidget(Button.builder(Component.empty(), btn -> {
+            this.minecraft.setScreen(new SettingsScreen(this));
+        }).bounds(panelX + PANEL_WIDTH - 40, panelY + 4, 16, 16).build());
+
+        this.addRenderableWidget(Button.builder(Component.literal("\u25B2"), btn -> {
             if (scrollOffset > 0) scrollOffset--;
-        }).dimensions(panelX + PANEL_WIDTH - 20, panelY + 40, 16, 16).build());
+        }).bounds(panelX + PANEL_WIDTH - 20, panelY + 40, 16, 16).build());
 
-        this.addDrawableChild(ButtonWidget.builder(Text.literal("V"), btn -> {
+        this.addRenderableWidget(Button.builder(Component.literal("\u25BC"), btn -> {
             if (scrollOffset < Math.max(0, entries.size() - VISIBLE_ENTRIES)) scrollOffset++;
-        }).dimensions(panelX + PANEL_WIDTH - 20, panelY + PANEL_HEIGHT - 24, 16, 16).build());
+        }).bounds(panelX + PANEL_WIDTH - 20, panelY + PANEL_HEIGHT - 24, 16, 16).build());
     }
 
     @Override
-    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
-        context.fill(0, 0, this.width, this.height, 0x88000000);
-    }
-
-    @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        this.renderBackground(context, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
+        ctx.fill(0, 0, this.width, this.height, 0x88000000);
 
         int panelX = (this.width  - PANEL_WIDTH)  / 2;
         int panelY = (this.height - PANEL_HEIGHT) / 2;
 
-        context.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0xF0101020);
+        ctx.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0xF0101020);
 
-        context.fill(panelX,                   panelY,                    panelX + PANEL_WIDTH, panelY + 1,            0xFF5865F2);
-        context.fill(panelX,                   panelY + PANEL_HEIGHT - 1, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT,  0xFF5865F2);
-        context.fill(panelX,                   panelY,                    panelX + 1,            panelY + PANEL_HEIGHT, 0xFF5865F2);
-        context.fill(panelX + PANEL_WIDTH - 1, panelY,                    panelX + PANEL_WIDTH,  panelY + PANEL_HEIGHT, 0xFF5865F2);
+        ctx.fill(panelX,                   panelY,                    panelX + PANEL_WIDTH, panelY + 1,            0xFF5865F2);
+        ctx.fill(panelX,                   panelY + PANEL_HEIGHT - 1, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT,  0xFF5865F2);
+        ctx.fill(panelX,                   panelY,                    panelX + 1,            panelY + PANEL_HEIGHT, 0xFF5865F2);
+        ctx.fill(panelX + PANEL_WIDTH - 1, panelY,                    panelX + PANEL_WIDTH,  panelY + PANEL_HEIGHT, 0xFF5865F2);
 
-        context.fill(panelX + 1, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + 20, 0xFF1E1E3A);
-        context.drawText(this.textRenderer, "Container History", panelX + 8, panelY + 6, 0xFFFFFFFF, true);
+        ctx.fill(panelX + 1, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + 20, 0xFF1E1E3A);
+        ctx.text(this.font, "Container History", panelX + 8, panelY + 6, 0xFFFFFFFF, true);
 
-        context.fill(panelX + 1, panelY + 20, panelX + PANEL_WIDTH - 1, panelY + 32, 0xFF16162A);
-        context.drawText(this.textRenderer,
+        ctx.fill(panelX + 1, panelY + 20, panelX + PANEL_WIDTH - 1, panelY + 32, 0xFF16162A);
+        ctx.text(this.font,
                 "Pos: " + pos.getX() + ", " + pos.getY() + ", " + pos.getZ(),
                 panelX + 8, panelY + 23, 0xFFAAAAAA, true);
 
-        context.fill(panelX + 1, panelY + 32, panelX + PANEL_WIDTH - 1, panelY + 33, 0xFF5865F2);
+        String limitLabel = "Limit: " + LootLedgerConfig.getLabel(LootLedgerClient.currentMaxEntries);
+        int limitWidth = this.font.width(limitLabel);
+        ctx.text(this.font, limitLabel,
+                panelX + PANEL_WIDTH - limitWidth - 24, panelY + 23, 0xFF666688, true);
+
+        ctx.fill(panelX + 1, panelY + 32, panelX + PANEL_WIDTH - 1, panelY + 33, 0xFF5865F2);
 
         hoveredEntry = -1;
         int entryStartY = panelY + 36;
 
         if (entries.isEmpty()) {
-            context.drawText(this.textRenderer,
+            ctx.text(this.font,
                     "No entries yet.",
                     panelX + 10, entryStartY + 10, 0xFFAAAAAA, true);
         }
@@ -96,66 +105,104 @@ public class HistoryOverlayScreen extends Screen {
             int entryY = entryStartY + i * ENTRY_HEIGHT;
 
             int rowBg = (i % 2 == 0) ? 0x33FFFFFF : 0x1AFFFFFF;
-            context.fill(panelX + 4, entryY, panelX + PANEL_WIDTH - 22, entryY + ENTRY_HEIGHT - 1, rowBg);
+            ctx.fill(panelX + 4, entryY, panelX + PANEL_WIDTH - 22, entryY + ENTRY_HEIGHT - 1, rowBg);
 
             if (mouseX >= panelX + 4 && mouseX <= panelX + PANEL_WIDTH - 22
                     && mouseY >= entryY && mouseY < entryY + ENTRY_HEIGHT) {
                 hoveredEntry = idx;
-                context.fill(panelX + 4, entryY, panelX + PANEL_WIDTH - 22, entryY + ENTRY_HEIGHT - 1, 0x44FFFFFF);
+                ctx.fill(panelX + 4, entryY, panelX + PANEL_WIDTH - 22, entryY + ENTRY_HEIGHT - 1, 0x44FFFFFF);
             }
 
-            context.drawText(this.textRenderer,
+            ctx.text(this.font,
                     entry.removed ? "-" : "+",
                     panelX + 8, entryY + 9,
                     entry.removed ? 0xFFFF4444 : 0xFF44FF44, true);
 
             ItemStack icon = getItemStack(entry.itemId);
             if (!icon.isEmpty()) {
-                context.drawItem(icon, panelX + 18, entryY + 4);
+                ctx.item(icon, panelX + 18, entryY + 4);
             }
 
-            context.drawText(this.textRenderer,
+            ctx.text(this.font,
                     entry.playerName,
                     panelX + 38, entryY + 4,
                     0xFF55FFFF, true);
 
             String localizedName = getLocalizedName(entry.itemId, entry.itemName);
-            context.drawText(this.textRenderer,
+            ctx.text(this.font,
                     entry.count + "x " + localizedName,
                     panelX + 38, entryY + 14,
                     0xFFFFDD44, true);
 
-            renderPlayerAvatar(context, entry.playerName, panelX + PANEL_WIDTH - 80, entryY + 4, 16);
+            renderPlayerAvatar(ctx, entry.playerName, panelX + PANEL_WIDTH - 80, entryY + 4, 16);
 
-            context.drawText(this.textRenderer,
+            ctx.text(this.font,
                     formatTime(entry.timestamp),
                     panelX + PANEL_WIDTH - 60, entryY + 9,
                     0xFF888888, true);
         }
 
+        if (!entries.isEmpty()) {
+            int from = scrollOffset + 1;
+            int to = Math.min(scrollOffset + VISIBLE_ENTRIES, entries.size());
+            String counter = from + "-" + to + " / " + entries.size();
+            int counterWidth = this.font.width(counter);
+            ctx.text(this.font, counter,
+                    panelX + PANEL_WIDTH / 2 - counterWidth / 2,
+                    panelY + PANEL_HEIGHT - 10, 0xFF666688, true);
+        }
+
         if (hoveredEntry >= 0) {
             ClientLogEntry entry = entries.get(hoveredEntry);
             String localizedName = getLocalizedName(entry.itemId, entry.itemName);
-            List<Text> tooltip = List.of(
-                    Text.literal("§bItem: §f"   + localizedName),
-                    Text.literal("§bID: §7"     + entry.itemId),
-                    Text.literal("§bAmount: §f" + entry.count),
-                    Text.literal("§bPlayer: §f" + entry.playerName),
-                    Text.literal("§bAction: "   + (entry.removed ? "§cRemoved" : "§aAdded")),
-                    Text.literal("§bTime: §7"   + formatTimeFull(entry.timestamp))
+            List<Component> tooltip = List.of(
+                    Component.literal("\u00A7bItem: \u00A7f"   + localizedName),
+                    Component.literal("\u00A7bID: \u00A77"     + entry.itemId),
+                    Component.literal("\u00A7bAmount: \u00A7f" + entry.count),
+                    Component.literal("\u00A7bPlayer: \u00A7f" + entry.playerName),
+                    Component.literal("\u00A7bAction: "   + (entry.removed ? "\u00A7cRemoved" : "\u00A7aAdded")),
+                    Component.literal("\u00A7bTime: \u00A77"   + formatTimeFull(entry.timestamp))
             );
-            context.drawTooltip(this.textRenderer, tooltip, mouseX, mouseY);
+            ctx.setTooltipForNextFrame(this.font, tooltip, java.util.Optional.empty(), mouseX, mouseY);
         }
 
-        super.render(context, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
+
+        renderGearIcon(ctx, panelX + PANEL_WIDTH - 40, panelY + 4);
     }
 
-    private void renderPlayerAvatar(DrawContext context, String playerName, int x, int y, int size) {
+    private void renderGearIcon(GuiGraphicsExtractor ctx, int x, int y) {
+        int c = 0xFFCCCCDD;
+        int hole = 0xFF1E1E3A;
+        int accent = 0xFF5865F2;
+
+        // Body (two overlapping rects → rounded shape)
+        ctx.fill(x + 5, y + 4, x + 11, y + 12, c);
+        ctx.fill(x + 4, y + 5, x + 12, y + 11, c);
+
+        // Cardinal teeth (N, S, E, W)
+        ctx.fill(x + 6, y + 2, x + 10, y + 5, c);
+        ctx.fill(x + 6, y + 11, x + 10, y + 14, c);
+        ctx.fill(x + 2, y + 6, x + 5, y + 10, c);
+        ctx.fill(x + 11, y + 6, x + 14, y + 10, c);
+
+        // Diagonal teeth (NW, NE, SW, SE)
+        ctx.fill(x + 3, y + 3, x + 6, y + 6, c);
+        ctx.fill(x + 10, y + 3, x + 13, y + 6, c);
+        ctx.fill(x + 3, y + 10, x + 6, y + 13, c);
+        ctx.fill(x + 10, y + 10, x + 13, y + 13, c);
+
+        // Center hole
+        ctx.fill(x + 6, y + 6, x + 10, y + 10, hole);
+        ctx.fill(x + 7, y + 7, x + 9, y + 9, accent);
+    }
+
+    private void renderPlayerAvatar(GuiGraphicsExtractor ctx, String playerName, int x, int y, int size) {
         int color = getPlayerColor(playerName);
-        context.fill(x, y, x + size, y + size, color);
-        context.fill(x + 1, y + 1, x + size - 1, y + size - 1, darken(color));
+        ctx.fill(x, y, x + size, y + size, color);
+        ctx.fill(x + 1, y + 1, x + size - 1, y + size - 1, darken(color));
         if (!playerName.isEmpty()) {
-            context.drawText(this.textRenderer,
+            ctx.text(this.font,
                     String.valueOf(playerName.charAt(0)).toUpperCase(),
                     x + 4, y + 4,
                     0xFFFFFFFF, true);
@@ -181,8 +228,10 @@ public class HistoryOverlayScreen extends Screen {
 
     private String getLocalizedName(String itemId, String fallback) {
         try {
-            return Registries.ITEM.getOptionalValue(Identifier.of(itemId))
-                    .map(item -> item.getName().getString())
+            return BuiltInRegistries.ITEM.getOptional(Identifier.fromNamespaceAndPath(
+                            itemId.contains(":") ? itemId.split(":")[0] : "minecraft",
+                            itemId.contains(":") ? itemId.split(":")[1] : itemId))
+                    .map(item -> item.getDefaultInstance().getHoverName().getString())
                     .orElse(fallback);
         } catch (Exception e) {
             return fallback;
@@ -191,8 +240,10 @@ public class HistoryOverlayScreen extends Screen {
 
     private ItemStack getItemStack(String itemId) {
         try {
-            return Registries.ITEM.getOptionalValue(Identifier.of(itemId))
-                    .map(item -> new ItemStack(item.getDefaultStack().getItem()))
+            return BuiltInRegistries.ITEM.getOptional(Identifier.fromNamespaceAndPath(
+                            itemId.contains(":") ? itemId.split(":")[0] : "minecraft",
+                            itemId.contains(":") ? itemId.split(":")[1] : itemId))
+                    .map(item -> new ItemStack(item.getDefaultInstance().getItem()))
                     .orElse(ItemStack.EMPTY);
         } catch (Exception e) {
             return ItemStack.EMPTY;
@@ -210,28 +261,29 @@ public class HistoryOverlayScreen extends Screen {
     }
 
     @Override
-    public boolean shouldPause() { return false; }
+    public boolean isPauseScreen() { return false; }
 
     @Override
-    public boolean keyPressed(net.minecraft.client.input.KeyInput input) {
-        if (this.client != null) {
-            if (this.client.options.inventoryKey.matchesKey(input) || input.key() == 256) {
-                this.close();
-                if (this.client.player != null) {
-                    this.client.player.closeHandledScreen();
+    public boolean keyPressed(KeyEvent keyEvent) {
+        if (this.minecraft != null) {
+            if (keyEvent.key() == GLFW.GLFW_KEY_ESCAPE
+                    || this.minecraft.options.keyInventory.matches(keyEvent)) {
+                this.onClose();
+                if (this.minecraft.player != null) {
+                    this.minecraft.player.closeContainer();
                 }
                 return true;
             }
         }
-        return super.keyPressed(input);
+        return super.keyPressed(keyEvent);
     }
 
     @Override
-    public void close() {
-        if (this.client != null && this.client.player != null) {
-            this.client.player.closeHandledScreen();
+    public void onClose() {
+        if (this.minecraft != null && this.minecraft.player != null) {
+            this.minecraft.player.closeContainer();
         }
-        super.close();
+        super.onClose();
     }
 
     private String formatTime(long timestamp) {

@@ -2,11 +2,11 @@ package loot.ledger;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.core.BlockPos;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,14 +28,14 @@ public class LootLedgerSaveData {
         });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            if (server.getTicks() % 6000 == 0) {
+            if (server.getTickCount() % 6000 == 0) {
                 save();
             }
         });
     }
 
     private static File getSaveFile(MinecraftServer server) {
-        File worldDir = server.getSavePath(WorldSavePath.ROOT).toFile();
+        File worldDir = server.getWorldPath(LevelResource.ROOT).toFile();
         File modDir = new File(worldDir, "lootledger");
         modDir.mkdirs();
         return new File(modDir, "container_log.nbt");
@@ -45,8 +45,8 @@ public class LootLedgerSaveData {
         if (saveFile == null) return;
 
         try {
-            NbtCompound root = new NbtCompound();
-            NbtCompound containers = new NbtCompound();
+            CompoundTag root = new CompoundTag();
+            CompoundTag containers = new CompoundTag();
 
             for (Map.Entry<BlockPos, List<ContainerAccessLog.LogEntry>> entry
                     : ContainerAccessLog.getAllEntries().entrySet()) {
@@ -57,10 +57,11 @@ public class LootLedgerSaveData {
             }
 
             root.put("containers", containers);
+            root.put("config", LootLedgerConfig.toNbt());
             NbtIo.write(root, saveFile.toPath());
-            LootLedger.LOGGER.info("[LootLedger] Gespeichert.");
+            LootLedger.LOGGER.info("[LootLedger] Saved.");
         } catch (IOException e) {
-            LootLedger.LOGGER.error("[LootLedger] Fehler beim Speichern!", e);
+            LootLedger.LOGGER.error("[LootLedger] Failed to save!", e);
         }
     }
 
@@ -68,12 +69,14 @@ public class LootLedgerSaveData {
         if (saveFile == null || !saveFile.exists()) return;
 
         try {
-            NbtCompound root = NbtIo.read(saveFile.toPath());
+            CompoundTag root = NbtIo.read(saveFile.toPath());
             if (root == null) return;
 
-            NbtCompound containers = root.getCompoundOrEmpty("containers");
+            LootLedgerConfig.fromNbt(root.getCompoundOrEmpty("config"));
 
-            for (String key : containers.getKeys()) {
+            CompoundTag containers = root.getCompoundOrEmpty("containers");
+
+            for (String key : containers.keySet()) {
                 String[] parts = key.split(",");
                 BlockPos pos = new BlockPos(
                         Integer.parseInt(parts[0]),
@@ -83,9 +86,9 @@ public class LootLedgerSaveData {
                 ContainerAccessLog.fromNbt(pos, containers.getCompoundOrEmpty(key));
             }
 
-            LootLedger.LOGGER.info("[LootLedger] Geladen.");
+            LootLedger.LOGGER.info("[LootLedger] Loaded.");
         } catch (IOException e) {
-            LootLedger.LOGGER.error("[LootLedger] Fehler beim Laden!", e);
+            LootLedger.LOGGER.error("[LootLedger] Failed to load!", e);
         }
     }
 }
