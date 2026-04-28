@@ -18,7 +18,7 @@ public class LootLedgerServerConfig {
 
     private final transient File configFile;
 
-    private boolean logDataSave = true;
+    private boolean logDataSave = false;
     private int logDataSaveInterval = 20 * 60 * 5;
 
     public LootLedgerServerConfig() {

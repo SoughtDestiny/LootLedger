@@ -42,15 +42,14 @@ public class LootLedgerSaveData {
     }
 
     public static void save() {
-        if (saveFile == null)
-            return;
+        if (saveFile == null) return;
 
         try {
             CompoundTag root = new CompoundTag();
             CompoundTag containers = new CompoundTag();
 
-            for (Map.Entry<BlockPos, List<ContainerAccessLog.LogEntry>> entry : ContainerAccessLog.getAllEntries()
-                    .entrySet()) {
+            for (Map.Entry<BlockPos, List<ContainerAccessLog.LogEntry>> entry
+                    : ContainerAccessLog.getAllEntries().entrySet()) {
 
                 BlockPos pos = entry.getKey();
                 String key = pos.getX() + "," + pos.getY() + "," + pos.getZ();
@@ -68,13 +67,11 @@ public class LootLedgerSaveData {
     }
 
     public static void load() {
-        if (saveFile == null || !saveFile.exists())
-            return;
+        if (saveFile == null || !saveFile.exists()) return;
 
         try {
             CompoundTag root = NbtIo.read(saveFile.toPath());
-            if (root == null)
-                return;
+            if (root == null) return;
 
             LootLedgerConfig.fromNbt(root.getCompoundOrEmpty("config"));
 
@@ -85,7 +82,8 @@ public class LootLedgerSaveData {
                 BlockPos pos = new BlockPos(
                         Integer.parseInt(parts[0]),
                         Integer.parseInt(parts[1]),
-                        Integer.parseInt(parts[2]));
+                        Integer.parseInt(parts[2])
+                );
                 ContainerAccessLog.fromNbt(pos, containers.getCompoundOrEmpty(key));
             }
 
