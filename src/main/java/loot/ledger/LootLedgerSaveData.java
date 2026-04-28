@@ -28,7 +28,7 @@ public class LootLedgerSaveData {
         });
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            if (server.getTickCount() % 6000 == 0) {
+            if (server.getTickCount() % LootLedger.CONFIG.getLogDataSaveInterval() == 0) {
                 save();
             }
         });
@@ -42,14 +42,15 @@ public class LootLedgerSaveData {
     }
 
     public static void save() {
-        if (saveFile == null) return;
+        if (saveFile == null)
+            return;
 
         try {
             CompoundTag root = new CompoundTag();
             CompoundTag containers = new CompoundTag();
 
-            for (Map.Entry<BlockPos, List<ContainerAccessLog.LogEntry>> entry
-                    : ContainerAccessLog.getAllEntries().entrySet()) {
+            for (Map.Entry<BlockPos, List<ContainerAccessLog.LogEntry>> entry : ContainerAccessLog.getAllEntries()
+                    .entrySet()) {
 
                 BlockPos pos = entry.getKey();
                 String key = pos.getX() + "," + pos.getY() + "," + pos.getZ();
@@ -59,18 +60,21 @@ public class LootLedgerSaveData {
             root.put("containers", containers);
             root.put("config", LootLedgerConfig.toNbt());
             NbtIo.write(root, saveFile.toPath());
-            LootLedger.LOGGER.info("[LootLedger] Saved.");
+            if (LootLedger.CONFIG.doLogDataSave())
+                LootLedger.LOGGER.info("[LootLedger] Saved.");
         } catch (IOException e) {
             LootLedger.LOGGER.error("[LootLedger] Failed to save!", e);
         }
     }
 
     public static void load() {
-        if (saveFile == null || !saveFile.exists()) return;
+        if (saveFile == null || !saveFile.exists())
+            return;
 
         try {
             CompoundTag root = NbtIo.read(saveFile.toPath());
-            if (root == null) return;
+            if (root == null)
+                return;
 
             LootLedgerConfig.fromNbt(root.getCompoundOrEmpty("config"));
 
@@ -81,8 +85,7 @@ public class LootLedgerSaveData {
                 BlockPos pos = new BlockPos(
                         Integer.parseInt(parts[0]),
                         Integer.parseInt(parts[1]),
-                        Integer.parseInt(parts[2])
-                );
+                        Integer.parseInt(parts[2]));
                 ContainerAccessLog.fromNbt(pos, containers.getCompoundOrEmpty(key));
             }
 
