@@ -8,6 +8,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.Container;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.server.level.ServerPlayer;
@@ -21,6 +22,8 @@ import java.util.Map;
 public class LootLedgerEvents {
 
     private static final Map<String, Map<Integer, ItemStack>> snapshots = new HashMap<>();
+    private static final Map<String, Map<Item, Integer>> accumulators = new HashMap<>();
+    private static final Map<String, Map<Item, ItemStack>> accumulatorReps = new HashMap<>();
 
     public static void register() {
         UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
@@ -82,44 +85,65 @@ public class LootLedgerEvents {
     private static final Map<String, BlockPos> pendingPos = new HashMap<>();
     private static final Map<String, Integer> pendingInventorySize = new HashMap<>();
 
-    public static void afterSlotClick(ServerPlayer player, AbstractContainerMenu handler,
-                                      int slotIndex, ItemStack oldStack, ItemStack newStack) {
-        if (handler == player.inventoryMenu) return;
-        if (ItemStack.matches(oldStack, newStack)) return;
-
+    public static BlockPos getTrackedPos(ServerPlayer player, AbstractContainerMenu handler) {
+        if (handler == player.inventoryMenu) return null;
         BlockPos pos = ((ScreenHandlerPos)(Object) handler).lootledger_getPos();
-        if (pos == null) return;
-
+        if (pos == null) return null;
         String key = snapshotKey(player, pos);
-        if (!snapshots.containsKey(key)) return;
+        if (!snapshots.containsKey(key)) return null;
+        return pos;
+    }
 
-        if (newStack.isEmpty() && !oldStack.isEmpty()) {
-            ContainerAccessLog.addEntry(pos, player.getName().getString(), oldStack, true);
-        } else if (!newStack.isEmpty() && oldStack.isEmpty()) {
-            ContainerAccessLog.addEntry(pos, player.getName().getString(), newStack, false);
-        } else {
-            int diff = newStack.getCount() - oldStack.getCount();
-            if (diff < 0) {
-                ItemStack diffStack = oldStack.copy();
-                diffStack.setCount(Math.abs(diff));
-                ContainerAccessLog.addEntry(pos, player.getName().getString(), diffStack, true);
-            } else if (diff > 0) {
-                ItemStack diffStack = newStack.copy();
-                diffStack.setCount(diff);
-                ContainerAccessLog.addEntry(pos, player.getName().getString(), diffStack, false);
-            }
+    public static void accumulate(ServerPlayer player, BlockPos pos,
+                                   Map<Item, Integer> diff, Map<Item, ItemStack> reps) {
+        String key = snapshotKey(player, pos);
+        Map<Item, Integer> acc = accumulators.computeIfAbsent(key, k -> new HashMap<>());
+        Map<Item, ItemStack> repAcc = accumulatorReps.computeIfAbsent(key, k -> new HashMap<>());
+        for (Map.Entry<Item, Integer> entry : diff.entrySet()) {
+            acc.merge(entry.getKey(), entry.getValue(), Integer::sum);
         }
+        for (Map.Entry<Item, ItemStack> entry : reps.entrySet()) {
+            repAcc.putIfAbsent(entry.getKey(), entry.getValue());
+        }
+    }
 
-        updateSnapshotSlotForAll(pos, slotIndex, newStack);
+    public static void flushAccumulator(ServerPlayer player, BlockPos pos) {
+        String key = snapshotKey(player, pos);
+        Map<Item, Integer> acc = accumulators.remove(key);
+        Map<Item, ItemStack> reps = accumulatorReps.remove(key);
+        if (acc == null) return;
+
+        String playerName = player.getName().getString();
+        for (Map.Entry<Item, Integer> entry : acc.entrySet()) {
+            int net = entry.getValue();
+            if (net == 0) continue;
+            ItemStack sample = reps != null ? reps.get(entry.getKey()) : null;
+            if (sample == null) continue;
+            sample = sample.copy();
+            sample.setCount(Math.abs(net));
+            ContainerAccessLog.addEntry(pos, playerName, sample, net < 0);
+        }
     }
 
     public static void onContainerClosed(ServerPlayer player) {
-        pendingPos.remove(player.getStringUUID());
-        pendingInventorySize.remove(player.getStringUUID());
-        snapshots.keySet().removeIf(key -> key.startsWith(player.getStringUUID()));
+        String uuid = player.getStringUUID();
+
+        AbstractContainerMenu handler = player.containerMenu;
+        if (handler != player.inventoryMenu) {
+            BlockPos pos = ((ScreenHandlerPos)(Object) handler).lootledger_getPos();
+            if (pos != null) {
+                flushAccumulator(player, pos);
+            }
+        }
+
+        pendingPos.remove(uuid);
+        pendingInventorySize.remove(uuid);
+        snapshots.keySet().removeIf(key -> key.startsWith(uuid));
+        accumulators.keySet().removeIf(key -> key.startsWith(uuid));
+        accumulatorReps.keySet().removeIf(key -> key.startsWith(uuid));
     }
 
-    private static void updateSnapshotSlotForAll(BlockPos pos, int slotIndex, ItemStack newStack) {
+    public static void updateSnapshotSlotForAll(BlockPos pos, int slotIndex, ItemStack newStack) {
         String posStr = pos.getX() + "," + pos.getY() + "," + pos.getZ();
         for (Map.Entry<String, Map<Integer, ItemStack>> entry : snapshots.entrySet()) {
             if (entry.getKey().contains("@" + posStr)) {

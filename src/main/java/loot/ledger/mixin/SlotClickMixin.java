@@ -13,6 +13,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import net.minecraft.world.item.Item;
+import net.minecraft.core.BlockPos;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -44,14 +47,38 @@ public class SlotClickMixin {
         AbstractContainerMenu handler = (AbstractContainerMenu) (Object) this;
         if (handler == serverPlayer.inventoryMenu) return;
 
+        BlockPos pos = LootLedgerEvents.getTrackedPos(serverPlayer, handler);
+        if (pos == null) {
+            lootledger_snapshot.clear();
+            return;
+        }
+
+        Map<Item, Integer> netDiff = new HashMap<>();
+        Map<Item, ItemStack> representative = new HashMap<>();
+
         for (Slot slot : handler.slots) {
             if (slot.container instanceof Inventory) continue;
             int idx = handler.slots.indexOf(slot);
             ItemStack before = lootledger_snapshot.getOrDefault(idx, ItemStack.EMPTY);
             ItemStack after = slot.getItem().copy();
             if (!ItemStack.matches(before, after)) {
-                LootLedgerEvents.afterSlotClick(serverPlayer, handler, idx, before, after);
+                LootLedgerEvents.updateSnapshotSlotForAll(pos, idx, after);
+
+                if (!before.isEmpty()) {
+                    netDiff.merge(before.getItem(), -before.getCount(), Integer::sum);
+                    representative.putIfAbsent(before.getItem(), before);
+                }
+                if (!after.isEmpty()) {
+                    netDiff.merge(after.getItem(), after.getCount(), Integer::sum);
+                    representative.putIfAbsent(after.getItem(), after);
+                }
             }
+        }
+
+        LootLedgerEvents.accumulate(serverPlayer, pos, netDiff, representative);
+
+        if (handler.getCarried().isEmpty()) {
+            LootLedgerEvents.flushAccumulator(serverPlayer, pos);
         }
 
         lootledger_snapshot.clear();

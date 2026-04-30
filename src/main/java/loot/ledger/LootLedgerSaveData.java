@@ -59,7 +59,6 @@ public class LootLedgerSaveData {
             root.put("containers", containers);
             root.put("config", LootLedgerConfig.toNbt());
             NbtIo.write(root, saveFile.toPath());
-            LootLedger.LOGGER.info("[LootLedger] Saved.");
         } catch (IOException e) {
             LootLedger.LOGGER.error("[LootLedger] Failed to save!", e);
         }
